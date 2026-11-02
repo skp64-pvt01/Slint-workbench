@@ -1,0 +1,10 @@
+Slint Workbench
+
+A standalone port of Raven Workbench (https://github.com/skp64-pvt01/Raven-workbench)
+built with Slint (https://slint.dev/).
+
+Slint is available under GPL-3.0-only or the Slint Royalty-free license; this
+project uses the GPL-3.0-only option, so the whole work is GPL-3.0-only.
+The application code follows the Raven Workbench project; the JSONC reader,
+settings, schema reader and plant model are shared ports of that project's
+Rust code.

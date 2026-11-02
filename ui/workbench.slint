@@ -1,0 +1,832 @@
+// Slint Workbench - the interface.
+//
+// One window: menu bar, toolbar, side bar, four panes, status bar. The data
+// lives in Rust (src/main.rs): this file only lays it out and forwards events.
+// The gauge and the trend are `Path` elements whose commands Rust rebuilds.
+
+import { Button, CheckBox, ComboBox, LineEdit, ScrollView } from "std-widgets.slint";
+
+export struct PrefSetting {
+    path: string,
+    group: string,
+    first-in-group: bool,
+    title: string,
+    description: string,
+    kind: string,
+    choices: [string],
+    value: string,
+}
+
+export struct GuideSection {
+    heading: string,
+    body: string,
+}
+
+export component Workbench inherits Window {
+    title: "Slint Workbench";
+    width: 1280px;
+    height: 820px;
+
+    // shell
+    in-out property <int> pane: 0;
+    in-out property <bool> dark: true;
+    in-out property <bool> toolbar-visible: true;
+    in-out property <string> channel: "dev";
+    in-out property <string> config-path: "";
+    in-out property <string> config-state: "";
+    in-out property <string> status-text: "";
+    in-out property <string> status-right: "";
+    in-out property <string> version-text: "0.1.0";
+    in-out property <bool> about-open: false;
+    in-out property <string> about-text: "";
+
+    // instrument panel
+    in-out property <float> pressure: 2;
+    in-out property <float> flow: 0;
+    in-out property <float> alarm-limit: 75;
+    in-out property <float> window-seconds: 10;
+    in-out property <bool> pump: false;
+    in-out property <bool> valve: false;
+    in-out property <bool> armed: false;
+    in-out property <bool> running: true;
+    in-out property <bool> alarm: false;
+    in-out property <string> pressure-text: "2.0 bar";
+    in-out property <string> flow-text: "0.0";
+    in-out property <string> window-label: "TREND  10 s";
+    in-out property <int> samples: 0;
+    in-out property <string> gauge-ticks: "";
+    in-out property <string> gauge-needle: "";
+    in-out property <string> chart-grid: "";
+    in-out property <string> chart-pressure: "";
+    in-out property <string> chart-flow: "";
+    in-out property <string> chart-alarm: "";
+
+    // preferences and guide
+    in-out property <string> filter-text: "";
+    in-out property <[PrefSetting]> pref-settings: [];
+    in-out property <int> shown-settings: 0;
+    in-out property <int> total-settings: 0;
+    in-out property <string> meta-text: "";
+    in-out property <int> guide-page: 0;
+    in-out property <string> guide-title: "";
+    in-out property <string> guide-intro: "";
+    in-out property <[GuideSection]> guide-sections: [];
+
+    // theme
+    property <color> bg: root.dark ? #15171a : #f5f6f8;
+    property <color> panel: root.dark ? #1d2024 : #ffffff;
+    property <color> panel2: root.dark ? #22262b : #eef0f3;
+    property <color> text-color: root.dark ? #e8eaed : #1c1f23;
+    property <color> muted: root.dark ? #9aa0a6 : #5f6670;
+    property <color> border-color: root.dark ? #2d3238 : #d7dbe0;
+    property <color> accent: root.dark ? #4c9aff : #1a6ee0;
+    property <color> good: root.dark ? #47c26a : #1e8a44;
+    property <color> bad: root.dark ? #ef5350 : #c62828;
+    property <color> track: root.dark ? #3a3f46 : #dde1e6;
+
+    // actions
+    callback set-pane(int);
+    callback toggle-running();
+    callback reset-plant();
+    callback toggle-switch(int);
+    callback set-theme(bool);
+    callback set-filter(string);
+    callback change-setting(string, string);
+    callback save-settings();
+    callback reset-settings();
+    callback change-guide-page(int);
+    callback copy(string);
+    callback quit-app();
+    callback placeholder();
+
+    MenuBar {
+        Menu {
+            title: "File";
+            MenuItem {
+                title: "Quit";
+                shortcut: @keys(Control + Q);
+                activated => { root.quit-app(); }
+            }
+        }
+        Menu {
+            title: "Edit";
+            MenuItem {
+                title: "Preferences...";
+                shortcut: @keys(Control + ",");
+                activated => { root.set-pane(3); }
+            }
+        }
+        Menu {
+            title: "View";
+            MenuItem {
+                title: "Application";
+                shortcut: @keys(Control + "0");
+                activated => { root.set-pane(0); }
+            }
+            MenuItem {
+                title: "Instrument panel";
+                shortcut: @keys(Control + I);
+                activated => { root.set-pane(1); }
+            }
+            MenuSeparator {}
+            MenuItem {
+                title: "Pause the simulation";
+                activated => { root.toggle-running(); }
+            }
+            MenuItem {
+                title: "Reset the plant";
+                activated => { root.reset-plant(); }
+            }
+            MenuSeparator {}
+            MenuItem {
+                title: "Dark";
+                activated => { root.set-theme(true); }
+            }
+            MenuItem {
+                title: "Light";
+                activated => { root.set-theme(false); }
+            }
+        }
+        Menu {
+            title: "Help";
+            MenuItem {
+                title: "User guide";
+                shortcut: @keys(F1);
+                activated => { root.set-pane(2); }
+            }
+            MenuItem {
+                title: "Configuration";
+                activated => { root.change-guide-page(1); root.set-pane(2); }
+            }
+            MenuSeparator {}
+            MenuItem {
+                title: "About Slint Workbench...";
+                activated => { root.about-open = true; }
+            }
+        }
+    }
+
+    Rectangle {
+        background: root.bg;
+
+        VerticalLayout {
+            spacing: 0px;
+
+            // ---- toolbar -------------------------------------------------
+            if root.toolbar-visible : Rectangle {
+                height: 44px;
+                background: root.panel2;
+                border-width: 1px;
+                border-color: root.border-color;
+
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 6px;
+                    alignment: start;
+
+                    Button {
+                        text: "Instrument panel";
+                        clicked => { root.set-pane(root.pane == 1 ? 0 : 1); }
+                    }
+                    Button {
+                        text: root.running ? "Pause" : "Resume";
+                        clicked => { root.toggle-running(); }
+                    }
+                    Button {
+                        text: "Reset";
+                        clicked => { root.reset-plant(); }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    Text {
+                        text: "SLINT · SIMULATED PLANT";
+                        color: root.muted;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            // ---- body ----------------------------------------------------
+            HorizontalLayout {
+                spacing: 0px;
+
+                // side bar
+                Rectangle {
+                    width: 192px;
+                    background: root.panel;
+                    border-width: 1px;
+                    border-color: root.border-color;
+
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 6px;
+
+                        Text {
+                            text: "PANES";
+                            color: root.muted;
+                            font-size: 10px;
+                            letter-spacing: 1px;
+                        }
+                        Button {
+                            text: "Application";
+                            primary: root.pane == 0;
+                            clicked => { root.set-pane(0); }
+                        }
+                        Button {
+                            text: "Instrument panel";
+                            primary: root.pane == 1;
+                            clicked => { root.set-pane(1); }
+                        }
+                        Button {
+                            text: "User guide";
+                            primary: root.pane == 2;
+                            clicked => { root.set-pane(2); }
+                        }
+                        Button {
+                            text: "Preferences";
+                            primary: root.pane == 3;
+                            clicked => { root.set-pane(3); }
+                        }
+                        Button {
+                            text: "Alarms";
+                            clicked => { root.placeholder(); }
+                        }
+                        Rectangle { vertical-stretch: 1; }
+                        Text {
+                            text: "Slint Workbench\n" + root.version-text;
+                            color: root.muted;
+                            font-size: 10px;
+                        }
+                    }
+
+                    ContextMenuArea {
+                        Menu {
+                            MenuItem {
+                                title: "Application";
+                                activated => { root.set-pane(0); }
+                            }
+                            MenuItem {
+                                title: "Instrument panel";
+                                activated => { root.set-pane(1); }
+                            }
+                            MenuItem {
+                                title: "User guide";
+                                activated => { root.set-pane(2); }
+                            }
+                            MenuSeparator {}
+                            MenuItem {
+                                title: "Preferences...";
+                                activated => { root.set-pane(3); }
+                            }
+                        }
+                    }
+                }
+
+                // the panes
+                Rectangle {
+                    horizontal-stretch: 1;
+                    clip: true;
+
+                    if root.pane == 0 : Rectangle {
+                        ScrollView {
+                            VerticalLayout {
+                                padding: 28px;
+                                spacing: 8px;
+                                alignment: start;
+
+                                Text {
+                                    text: "Slint Workbench";
+                                    font-size: 28px;
+                                    font-weight: 600;
+                                    color: root.text-color;
+                                }
+                                Text {
+                                    text: "Release " + root.version-text + "   ·   channel " + root.channel;
+                                    color: root.muted;
+                                    font-size: 13px;
+                                }
+                                Rectangle { height: 1px; background: root.border-color; }
+                                Text { text: "Application"; color: root.muted; font-size: 12px; }
+                                Text { text: "Slint Workbench"; color: root.text-color; font-size: 12px; }
+                                Text { text: "Version"; color: root.muted; font-size: 12px; }
+                                Text { text: root.version-text; color: root.text-color; font-size: 12px; }
+                                Text { text: "Channel"; color: root.muted; font-size: 12px; }
+                                Text { text: root.channel; color: root.text-color; font-size: 12px; }
+                                Text { text: "Toolkit"; color: root.muted; font-size: 12px; }
+                                Text { text: "Slint 1.18"; color: root.text-color; font-size: 12px; }
+                                Text { text: "Configuration"; color: root.muted; font-size: 12px; }
+                                Text { text: root.config-path; color: root.text-color; font-size: 12px; }
+                                Text { text: "Config state"; color: root.muted; font-size: 12px; }
+                                Text { text: root.config-state; color: root.text-color; font-size: 12px; }
+                                Rectangle { height: 1px; background: root.border-color; }
+                                Text { text: "Panes and shortcuts"; color: root.muted; font-size: 11px; }
+                                Text { text: "Ctrl+I   Instrument panel"; color: root.text-color; font-size: 12px; }
+                                Text { text: "Ctrl+0   Application"; color: root.text-color; font-size: 12px; }
+                                Text { text: "Ctrl+Q   Quit"; color: root.text-color; font-size: 12px; }
+                                Text {
+                                    text: "Slint implementation · part of a family of Workbench ports";
+                                    color: root.muted;
+                                    font-size: 10px;
+                                }
+                            }
+                        }
+
+                        ContextMenuArea {
+                            Menu {
+                                MenuItem {
+                                    title: "User guide";
+                                    activated => { root.set-pane(2); }
+                                }
+                                MenuItem {
+                                    title: "Preferences...";
+                                    activated => { root.set-pane(3); }
+                                }
+                                MenuSeparator {}
+                                MenuItem {
+                                    title: "Copy version";
+                                    activated => { root.copy("version"); }
+                                }
+                                MenuItem {
+                                    title: "Copy configuration path";
+                                    activated => { root.copy("config"); }
+                                }
+                            }
+                        }
+                    }
+
+                    if root.pane == 1 : Rectangle {
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 12px;
+
+                            HorizontalLayout {
+                                spacing: 12px;
+
+                                // gauge
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    background: root.panel;
+                                    border-radius: 12px;
+                                    border-width: 1px;
+                                    border-color: root.border-color;
+
+                                    VerticalLayout {
+                                        padding: 12px;
+                                        spacing: 4px;
+
+                                        Text { text: "PRESSURE  P-101"; color: root.muted; font-size: 11px; }
+                                        Rectangle {
+                                            height: 190px;
+                                            Path {
+                                                x: (parent.width - self.width) / 2; y: 0; width: 240px; height: 190px;
+                                                commands: root.gauge-ticks;
+                                                stroke: root.text-color;
+                                                stroke-width: 1.5px;
+                                                fill: transparent;
+                                            }
+                                            Path {
+                                                x: (parent.width - self.width) / 2; y: 0; width: 240px; height: 190px;
+                                                commands: root.gauge-needle;
+                                                stroke: root.pressure > root.alarm-limit ? root.bad : root.accent;
+                                                stroke-width: 3px;
+                                                fill: transparent;
+                                            }
+                                            Text {
+                                                x: (parent.width - self.width) / 2; y: 152px; width: 240px;
+                                                text: root.pressure-text;
+                                                color: root.text-color;
+                                                font-size: 22px;
+                                                horizontal-alignment: center;
+                                                font-family: "monospace";
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // flow meter
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    background: root.panel;
+                                    border-radius: 12px;
+                                    border-width: 1px;
+                                    border-color: root.border-color;
+
+                                    VerticalLayout {
+                                        padding: 12px;
+                                        spacing: 8px;
+                                        Text { text: "FLOW  F-201"; color: root.muted; font-size: 11px; }
+                                        Text {
+                                            text: root.flow-text;
+                                            color: root.accent;
+                                            font-size: 34px;
+                                            font-family: "monospace";
+                                        }
+                                        Text { text: "L/min"; color: root.muted; font-size: 12px; }
+                                        Rectangle { vertical-stretch: 1; }
+                                        Rectangle {
+                                            height: 8px;
+                                            border-radius: 4px;
+                                            background: root.track;
+                                            Rectangle {
+                                                width: parent.width * (root.flow / 100);
+                                                height: 8px;
+                                                border-radius: 4px;
+                                                background: root.accent;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // lamps and switches
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    background: root.panel;
+                                    border-radius: 12px;
+                                    border-width: 1px;
+                                    border-color: root.border-color;
+
+                                    VerticalLayout {
+                                        padding: 12px;
+                                        spacing: 6px;
+
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            spacing: 18px;
+                                            VerticalLayout {
+                                                alignment: center;
+                                                spacing: 4px;
+                                                Rectangle {
+                                                    width: 42px; height: 42px; border-radius: 21px;
+                                                    background: root.dark ? #2fae57 : #47c26a;
+                                                }
+                                                Text { text: "POWER"; color: root.muted; font-size: 10px; horizontal-alignment: center; }
+                                            }
+                                            VerticalLayout {
+                                                alignment: center;
+                                                spacing: 4px;
+                                                Rectangle {
+                                                    width: 42px; height: 42px; border-radius: 21px;
+                                                    background: root.dark ? #2a7bd4 : #4c9aff;
+                                                }
+                                                Text { text: "LINK"; color: root.muted; font-size: 10px; horizontal-alignment: center; }
+                                            }
+                                            VerticalLayout {
+                                                alignment: center;
+                                                spacing: 4px;
+                                                Rectangle {
+                                                    width: 42px; height: 42px; border-radius: 21px;
+                                                    background: root.alarm ? root.bad : root.track;
+                                                }
+                                                Text { text: "ALARM"; color: root.muted; font-size: 10px; horizontal-alignment: center; }
+                                            }
+                                        }
+                                        Text {
+                                            text: root.alarm ? "HIGH PRESSURE" : (root.armed ? "interlocks armed" : "interlocks off");
+                                            color: root.alarm ? root.bad : (root.armed ? root.good : root.muted);
+                                            font-size: 12px;
+                                            horizontal-alignment: center;
+                                        }
+                                        Button {
+                                            text: root.pump ? "PUMP  ON" : "PUMP  OFF";
+                                            primary: root.pump;
+                                            clicked => { root.toggle-switch(0); }
+                                        }
+                                        Button {
+                                            text: root.valve ? "VALVE  OPEN" : "VALVE  SHUT";
+                                            primary: root.valve;
+                                            clicked => { root.toggle-switch(1); }
+                                        }
+                                        Button {
+                                            text: root.armed ? "INTERLOCKS  ARMED" : "INTERLOCKS  OFF";
+                                            primary: root.armed;
+                                            clicked => { root.toggle-switch(2); }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // trend
+                            Rectangle {
+                                vertical-stretch: 1;
+                                background: root.panel;
+                                border-radius: 12px;
+                                border-width: 1px;
+                                border-color: root.border-color;
+
+                                VerticalLayout {
+                                    padding: 12px;
+                                    spacing: 4px;
+                                    Text { text: root.window-label; color: root.muted; font-size: 11px; }
+                                    Rectangle {
+                                        vertical-stretch: 1;
+                                        Path {
+                                            x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                                            width: 480px; height: 160px;
+                                            commands: root.chart-grid;
+                                            stroke: root.border-color;
+                                            stroke-width: 1px;
+                                            fill: transparent;
+                                        }
+                                        Path {
+                                            x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                                            width: 480px; height: 160px;
+                                            commands: root.chart-pressure;
+                                            stroke: root.accent;
+                                            stroke-width: 2px;
+                                            fill: transparent;
+                                        }
+                                        Path {
+                                            x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                                            width: 480px; height: 160px;
+                                            commands: root.chart-flow;
+                                            stroke: root.good;
+                                            stroke-width: 2px;
+                                            fill: transparent;
+                                        }
+                                        Path {
+                                            x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                                            width: 480px; height: 160px;
+                                            commands: root.chart-alarm;
+                                            stroke: root.bad;
+                                            stroke-width: 1.5px;
+                                            fill: transparent;
+                                        }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        alignment: start;
+                                        Text { text: root.samples + " samples"; color: root.muted; font-size: 11px; }
+                                        Rectangle { horizontal-stretch: 1; }
+                                        Button { text: root.running ? "Pause" : "Resume"; clicked => { root.toggle-running(); } }
+                                        Button { text: "Reset"; clicked => { root.reset-plant(); } }
+                                    }
+                                }
+                            }
+                        }
+
+                        ContextMenuArea {
+                            Menu {
+                                MenuItem {
+                                    title: "Pause the simulation";
+                                    activated => { root.toggle-running(); }
+                                }
+                                MenuItem {
+                                    title: "Reset the plant";
+                                    activated => { root.reset-plant(); }
+                                }
+                                MenuSeparator {}
+                                MenuItem {
+                                    title: "Copy the readings";
+                                    activated => { root.copy("readings"); }
+                                }
+                            }
+                        }
+                    }
+
+                    if root.pane == 2 : Rectangle {
+                        VerticalLayout {
+                            spacing: 0px;
+
+                            Rectangle {
+                                height: 40px;
+                                background: root.panel;
+                                border-width: 1px;
+                                border-color: root.border-color;
+                                HorizontalLayout {
+                                    padding: 6px;
+                                    spacing: 6px;
+                                    alignment: start;
+                                    Button {
+                                        text: "Back";
+                                        enabled: root.guide-page > 0;
+                                        clicked => { root.change-guide-page(root.guide-page - 1); }
+                                    }
+                                    Button {
+                                        text: "Forward";
+                                        enabled: root.guide-page < 2;
+                                        clicked => { root.change-guide-page(root.guide-page + 1); }
+                                    }
+                                    Button {
+                                        text: "Index";
+                                        clicked => { root.change-guide-page(0); }
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    Text { text: root.guide-title; color: root.muted; font-size: 11px; vertical-alignment: center; }
+                                }
+                            }
+
+                            ScrollView {
+                                VerticalLayout {
+                                    padding: 24px;
+                                    spacing: 6px;
+                                    alignment: start;
+                                    Text { text: root.guide-title; font-size: 24px; font-weight: 600; color: root.text-color; }
+                                    Text {
+                                        text: root.guide-intro;
+                                        wrap: word-wrap;
+                                        color: root.muted;
+                                        font-size: 13px;
+                                        line-height-factor: 1.5;
+                                    }
+                                    for section in root.guide-sections : VerticalLayout {
+                                        spacing: 4px;
+                                        Text { text: section.heading; font-size: 14px; font-weight: 600; color: root.text-color; }
+                                        Text {
+                                            text: section.body;
+                                            wrap: word-wrap;
+                                            color: root.text-color;
+                                            font-size: 13px;
+                                            line-height-factor: 1.5;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        ContextMenuArea {
+                            Menu {
+                                MenuItem {
+                                    title: "Back";
+                                    activated => { root.change-guide-page(root.guide-page - 1); }
+                                }
+                                MenuItem {
+                                    title: "Forward";
+                                    activated => { root.change-guide-page(root.guide-page + 1); }
+                                }
+                                MenuItem {
+                                    title: "Index";
+                                    activated => { root.change-guide-page(0); }
+                                }
+                                MenuSeparator {}
+                                MenuItem {
+                                    title: "Preferences...";
+                                    activated => { root.set-pane(3); }
+                                }
+                            }
+                        }
+                    }
+
+                    if root.pane == 3 : Rectangle {
+                        VerticalLayout {
+                            padding: 20px;
+                            spacing: 10px;
+
+                            HorizontalLayout {
+                                spacing: 12px;
+                                alignment: start;
+                                Text { text: "Preferences"; font-size: 20px; font-weight: 600; color: root.text-color; vertical-alignment: center; }
+                                Rectangle { horizontal-stretch: 1; }
+                                LineEdit {
+                                    width: 260px;
+                                    text: root.filter-text;
+                                    placeholder-text: "Search settings";
+                                    edited(text) => { root.filter-text = text; root.set-filter(text); }
+                                }
+                            }
+                            Text { text: root.meta-text; color: root.muted; font-size: 11px; }
+
+                            ScrollView {
+                                VerticalLayout {
+                                    spacing: 2px;
+                                    for setting in root.pref-settings : VerticalLayout {
+                                        spacing: 2px;
+                                        if setting.first-in-group : Text {
+                                            text: setting.group;
+                                            color: root.muted;
+                                            font-size: 12px;
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 16px;
+                                            padding-top: 5px;
+                                            padding-bottom: 5px;
+                                            VerticalLayout {
+                                                horizontal-stretch: 1;
+                                                spacing: 2px;
+                                                Text { text: setting.title; font-size: 13px; color: root.text-color; }
+                                                if setting.description != "" : Text {
+                                                    text: setting.description;
+                                                    color: root.muted;
+                                                    font-size: 11px;
+                                                    wrap: word-wrap;
+                                                }
+                                            }
+                                            if setting.kind == "boolean" : CheckBox {
+                                                width: 220px;
+                                                checked: setting.value == "true";
+                                                toggled => { root.change-setting(setting.path, self.checked ? "true" : "false"); }
+                                            }
+                                            if setting.choices.length > 0 : ComboBox {
+                                                width: 220px;
+                                                model: setting.choices;
+                                                current-value: setting.value;
+                                                selected(value) => { root.change-setting(setting.path, value); }
+                                            }
+                                            if setting.kind != "boolean" && setting.choices.length == 0 : LineEdit {
+                                                width: 220px;
+                                                text: setting.value;
+                                                edited(text) => { root.change-setting(setting.path, text); }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Text {
+                                    text: "Showing " + root.shown-settings + " of " + root.total-settings + " settings";
+                                    color: root.muted;
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                                Button { text: "Reset to defaults"; clicked => { root.reset-settings(); } }
+                                Button { text: "Save"; primary: true; clicked => { root.save-settings(); } }
+                            }
+                        }
+
+                        ContextMenuArea {
+                            Menu {
+                                MenuItem {
+                                    title: "Save";
+                                    activated => { root.save-settings(); }
+                                }
+                                MenuItem {
+                                    title: "Reset to defaults";
+                                    activated => { root.reset-settings(); }
+                                }
+                                MenuSeparator {}
+                                MenuItem {
+                                    title: "Copy configuration path";
+                                    activated => { root.copy("config"); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ---- status bar ----------------------------------------------
+            Rectangle {
+                height: 30px;
+                background: root.panel;
+                border-width: 1px;
+                border-color: root.border-color;
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    spacing: 12px;
+                    Text {
+                        text: root.status-text;
+                        color: root.text-color;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    Text {
+                        text: root.status-right;
+                        color: root.muted;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+
+    // about dialog
+    if root.about-open : Rectangle {
+        background: #00000088;
+        TouchArea {
+            clicked => { root.about-open = false; }
+        }
+        Rectangle {
+            x: (root.width - self.width) / 2;
+            y: (root.height - self.height) / 2;
+            width: 480px;
+            height: 260px;
+            background: root.panel;
+            border-radius: 10px;
+            border-width: 1px;
+            border-color: root.border-color;
+
+            VerticalLayout {
+                padding: 20px;
+                spacing: 10px;
+                Text { text: "About Slint Workbench"; font-size: 17px; font-weight: 600; color: root.text-color; }
+                Text {
+                    text: root.about-text;
+                    color: root.muted;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                    vertical-stretch: 1;
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    Button { text: "Close"; primary: true; clicked => { root.about-open = false; } }
+                }
+            }
+        }
+    }
+}
