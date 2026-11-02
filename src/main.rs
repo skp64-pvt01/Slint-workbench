@@ -127,6 +127,7 @@ fn refresh_shell(ui: &Workbench, app: &AppModel) {
     ui.set_status_text(app.status.clone().into());
     ui.set_status_right(app.status_right().into());
     ui.set_version_text(VERSION.into());
+    ui.set_toolkit_label(format!("Slint {}", model::SLINT_VERSION).into());
     ui.set_about_text(app.about_text().into());
 }
 

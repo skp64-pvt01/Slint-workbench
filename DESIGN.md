@@ -1,6 +1,6 @@
 # DESIGN.md — Slint Workbench
 
-A desktop application shell on top of [Slint](https://slint.dev/). This
+A desktop application shell on top of [Slint](https://slint.dev/) 1.18.1. This
 document describes how the port is put together and how to extend it. It stands
 alone: the folder is meant to be copied into the next project.
 

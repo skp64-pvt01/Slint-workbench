@@ -1,6 +1,6 @@
 # Slint Workbench
 
-A desktop application shell written with [Slint](https://slint.dev/): a menu
+A desktop application shell written with [Slint](https://slint.dev/) 1.18.1: a menu
 bar, a toolbar, a side bar, a status bar, four panes (Application, Instrument
 panel, User guide, Preferences), a JSONC configuration file with a JSON Schema
 that drives the Preferences form, a native user guide and right-click menus.
@@ -58,7 +58,7 @@ Slint-workbench/
 
 ## Build and run
 
-Rust 1.92+ (the Slint 1.18 requirement).
+Slint 1.18.1 and Rust 1.92+ (the Slint 1.18 requirement).
 
 ```bash
 cargo run --release                        # the window

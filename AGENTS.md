@@ -31,7 +31,7 @@ plain Cargo, run with `cargo run`, and be checked with `cargo test` and
 
 ## Prerequisites
 
-* Rust 1.92 or newer (Slint 1.18's minimum).
+* Rust 1.92 or newer with **Slint 1.18.1**. The locked version is checked against the one the UI shows.
 * A desktop session for the window; `cargo test` uses the testing backend.
 * No extra native packages beyond what the default Slint backend pulls in on
   Linux (winit + X11/Wayland, or the software renderer).

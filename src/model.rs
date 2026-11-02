@@ -10,6 +10,8 @@ use crate::plant::{Plant, PANEL_INTERLOCKS, PANEL_PUMP, PANEL_VALVE};
 use crate::schema::{self, Schema, Setting};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Must match the `slint` entry in Cargo.lock; `self_test` checks it.
+pub const SLINT_VERSION: &str = "1.18.1";
 pub const DEFAULT_CONFIG: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/workbench.jsonc");
 pub const SCHEMA_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/workbench.schema.json");
 
@@ -201,13 +203,26 @@ impl AppModel {
 
     pub fn about_text(&self) -> String {
         format!(
-            "Slint Workbench {} ({})\n\nSlint 1.18\n\nConfiguration:\n  {}\n  {}",
+            "Slint Workbench {} ({})\n\nSlint {}\n\nConfiguration:\n  {}\n  {}",
             VERSION,
             self.config.channel,
+            SLINT_VERSION,
             self.config.path,
             self.config.status()
         )
     }
+}
+
+fn locked_version(crate_name: &str) -> Option<String> {
+    let lock = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.lock")).ok()?;
+    let mut lines = lock.lines();
+    while let Some(line) = lines.next() {
+        if line == format!("name = \"{}\"", crate_name) {
+            let version = lines.next()?.trim();
+            return version.strip_prefix("version = \"")?.strip_suffix('"').map(str::to_string);
+        }
+    }
+    None
 }
 
 /// The checks `--test` runs, and the ones `cargo test` runs through the model.
@@ -314,6 +329,10 @@ pub fn self_test() -> Vec<String> {
     }
     check!(configured.plant.pressure > start + 20.0, "the configured pump runs the plant");
 
+    check!(
+        locked_version("slint").as_deref() == Some(SLINT_VERSION),
+        "the locked Slint version matches the one the application shows"
+    );
     check!(guide::PAGES.len() >= 3, "the guide has pages");
     check!(!guide::page(0).sections.is_empty(), "the guide has sections");
 

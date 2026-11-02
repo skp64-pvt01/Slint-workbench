@@ -37,6 +37,7 @@ export component Workbench inherits Window {
     in-out property <string> status-text: "";
     in-out property <string> status-right: "";
     in-out property <string> version-text: "0.1.0";
+    in-out property <string> toolkit-label: "Slint";
     in-out property <bool> about-open: false;
     in-out property <string> about-text: "";
 
@@ -314,7 +315,7 @@ export component Workbench inherits Window {
                                 Text { text: "Channel"; color: root.muted; font-size: 12px; }
                                 Text { text: root.channel; color: root.text-color; font-size: 12px; }
                                 Text { text: "Toolkit"; color: root.muted; font-size: 12px; }
-                                Text { text: "Slint 1.18"; color: root.text-color; font-size: 12px; }
+                                Text { text: root.toolkit-label; color: root.text-color; font-size: 12px; }
                                 Text { text: "Configuration"; color: root.muted; font-size: 12px; }
                                 Text { text: root.config-path; color: root.text-color; font-size: 12px; }
                                 Text { text: "Config state"; color: root.muted; font-size: 12px; }
